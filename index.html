@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Product Admin Panel</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; background: #f9f9f9; }
+    h1 { text-align: center; }
+    form, .product-list { background: #fff; padding: 20px; border-radius: 10px; margin-bottom: 20px; }
+    input, textarea, button { margin: 5px 0; padding: 8px; width: 100%; }
+    .product { border: 1px solid #ddd; padding: 10px; margin: 10px 0; border-radius: 8px; background: #fafafa; }
+    img { width: 100px; height: 100px; object-fit: cover; margin: 5px; border-radius: 5px; }
+    .actions button { margin-right: 5px; }
+  </style>
+</head>
+<body>
+  <h1>🛒 Product Admin Panel</h1>
+
+  <!-- Add Product Form -->
+  <form id="productForm">
+    <input type="text" id="title" placeholder="Product Title" required />
+    <input type="number" id="price" placeholder="Price" required />
+    <input type="number" id="stock" placeholder="Stock" required />
+    <textarea id="description" placeholder="Description"></textarea>
+
+    <!-- Image URL inputs -->
+    <input type="url" id="img1" placeholder="Image URL 1" />
+    <input type="url" id="img2" placeholder="Image URL 2" />
+    <input type="url" id="img3" placeholder="Image URL 3" />
+    <input type="url" id="img4" placeholder="Image URL 4" />
+    <input type="url" id="img5" placeholder="Image URL 5" />
+
+    <button type="submit">Add Product</button>
+  </form>
+
+  <!-- Product List -->
+  <div class="product-list" id="productList">
+    <h2>Products</h2>
+    <div id="products"></div>
+  </div>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+  <script>
+    // Firebase config
+    const firebaseConfig = {
+      apiKey: "AIzaSyC5MGkOf5_0cF-xQrcA1PBSSvq6Y-AarSc",
+      authDomain: "ds-mart-888d2.firebaseapp.com",
+      projectId: "ds-mart-888d2",
+      storageBucket: "ds-mart-888d2.appspot.com",
+      messagingSenderId: "108308848034",
+      appId: "1:108308848034:web:a8b3fe5e8784a4771e66fb",
+      measurementId: "G-KY618BJER7"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    const form = document.getElementById("productForm");
+    const productsDiv = document.getElementById("products");
+
+    // Add Product
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const title = document.getElementById("title").value;
+      const price = parseFloat(document.getElementById("price").value);
+      const stock = parseInt(document.getElementById("stock").value);
+      const description = document.getElementById("description").value;
+
+      // Collect image URLs (ignore empty ones)
+      const imageUrls = [
+        document.getElementById("img1").value,
+        document.getElementById("img2").value,
+        document.getElementById("img3").value,
+        document.getElementById("img4").value,
+        document.getElementById("img5").value,
+      ].filter(url => url.trim() !== "");
+
+      // Save in Firestore -> Products collection
+      await db.collection("Products").add({
+        title, price, stock, description,
+        images: imageUrls,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+
+      form.reset();
+      loadProducts();
+    });
+
+    // Load Products
+    async function loadProducts() {
+      productsDiv.innerHTML = "";
+      const snapshot = await db.collection("Products").orderBy("createdAt","desc").get();
+      snapshot.forEach(doc => {
+        const p = doc.data();
+        const div = document.createElement("div");
+        div.className = "product";
+        div.innerHTML = `
+          <h3>${p.title} - ₹${p.price}</h3>
+          <p>${p.description}</p>
+          <p>Stock: ${p.stock}</p>
+          <div>${p.images.map(url => `<img src='${url}' />`).join("")}</div>
+          <div class="actions">
+            <button onclick="deleteProduct('${doc.id}')">Delete</button>
+          </div>
+        `;
+        productsDiv.appendChild(div);
+      });
+    }
+
+    // Delete Product
+    async function deleteProduct(id) {
+      if (!confirm("Delete this product?")) return;
+      await db.collection("Products").doc(id).delete();
+      loadProducts();
+    }
+
+    loadProducts();
+  </script>
+</body>
+</html>
