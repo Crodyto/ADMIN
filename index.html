@@ -2,122 +2,199 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Product Admin Panel</title>
+  <title>Admin Panel - Products</title>
   <style>
-    body { font-family: Arial, sans-serif; margin: 20px; background: #f9f9f9; }
-    h1 { text-align: center; }
-    form, .product-list { background: #fff; padding: 20px; border-radius: 10px; margin-bottom: 20px; }
-    input, textarea, button { margin: 5px 0; padding: 8px; width: 100%; }
-    .product { border: 1px solid #ddd; padding: 10px; margin: 10px 0; border-radius: 8px; background: #fafafa; }
-    img { width: 100px; height: 100px; object-fit: cover; margin: 5px; border-radius: 5px; }
-    .actions button { margin-right: 5px; }
+    body{font-family:sans-serif; margin:20px; background:#f4f4f4;}
+    .card{background:#fff;padding:20px;margin-bottom:20px;border-radius:8px;box-shadow:0 2px 6px rgba(0,0,0,0.1);}
+    input, textarea, button, select{padding:8px;margin:4px 0;width:100%; box-sizing:border-box;}
+    table{width:100%;border-collapse:collapse;}
+    th, td{border:1px solid #ddd;padding:8px;text-align:left;}
+    th{background:#eee;}
+    .row{display:flex; gap:8px; flex-wrap:wrap;}
+    .small{width:auto; padding:6px 12px;}
   </style>
 </head>
 <body>
-  <h1>🛒 Product Admin Panel</h1>
+  <div class="card" id="loginCard">
+    <h2>Admin Login</h2>
+    <input type="email" id="email" placeholder="Email" />
+    <input type="password" id="password" placeholder="Password" />
+    <button id="loginBtn">Login</button>
+    <div id="loginMsg" style="color:red;"></div>
+  </div>
 
-  <!-- Add Product Form -->
-  <form id="productForm">
-    <input type="text" id="title" placeholder="Product Title" required />
-    <input type="number" id="price" placeholder="Price" required />
-    <input type="number" id="stock" placeholder="Stock" required />
-    <textarea id="description" placeholder="Description"></textarea>
+  <div id="adminPanel" style="display:none;">
+    <h2>Product Management</h2>
+    <div class="card">
+      <h3>Add / Edit Product</h3>
+      <input type="text" id="productId" placeholder="Leave empty to add new" />
+      <input type="text" id="name" placeholder="Product Name" />
+      <input type="number" id="price" placeholder="Price" />
+      <textarea id="description" placeholder="Description"></textarea>
+      <input type="text" id="sizes" placeholder="Sizes (comma separated)" />
+      <input type="text" id="image1" placeholder="Image URL 1" />
+      <input type="text" id="image2" placeholder="Image URL 2" />
+      <input type="text" id="image3" placeholder="Image URL 3" />
+      <input type="text" id="image4" placeholder="Image URL 4" />
+      <input type="text" id="image5" placeholder="Image URL 5" />
+      <div class="row">
+        <button id="saveBtn" class="small">Save</button>
+        <button id="clearBtn" class="small">Clear</button>
+      </div>
+    </div>
 
-    <!-- Image URL inputs -->
-    <input type="url" id="img1" placeholder="Image URL 1" />
-    <input type="url" id="img2" placeholder="Image URL 2" />
-    <input type="url" id="img3" placeholder="Image URL 3" />
-    <input type="url" id="img4" placeholder="Image URL 4" />
-    <input type="url" id="img5" placeholder="Image URL 5" />
-
-    <button type="submit">Add Product</button>
-  </form>
-
-  <!-- Product List -->
-  <div class="product-list" id="productList">
-    <h2>Products</h2>
-    <div id="products"></div>
+    <div class="card">
+      <h3>Existing Products</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th><th>Name</th><th>Price</th><th>Sizes</th><th>Images</th><th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="productsTable">
+          <tr><td colspan="6">Loading...</td></tr>
+        </tbody>
+      </table>
+    </div>
   </div>
 
   <!-- Firebase SDK -->
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script type="module">
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js';
+    import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js';
+    import { getFirestore, collection, addDoc, doc, updateDoc, deleteDoc, onSnapshot } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js';
 
-  <script>
-    // Firebase config
     const firebaseConfig = {
       apiKey: "AIzaSyC5MGkOf5_0cF-xQrcA1PBSSvq6Y-AarSc",
       authDomain: "ds-mart-888d2.firebaseapp.com",
       projectId: "ds-mart-888d2",
-      storageBucket: "ds-mart-888d2.appspot.com",
+      storageBucket: "ds-mart-888d2.firebasestorage.app",
       messagingSenderId: "108308848034",
       appId: "1:108308848034:web:a8b3fe5e8784a4771e66fb",
       measurementId: "G-KY618BJER7"
     };
 
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.firestore();
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+    const productsCol = collection(db,'products');
 
-    const form = document.getElementById("productForm");
-    const productsDiv = document.getElementById("products");
+    const loginCard = document.getElementById('loginCard');
+    const adminPanel = document.getElementById('adminPanel');
+    const loginBtn = document.getElementById('loginBtn');
+    const loginMsg = document.getElementById('loginMsg');
 
-    // Add Product
-    form.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const title = document.getElementById("title").value;
-      const price = parseFloat(document.getElementById("price").value);
-      const stock = parseInt(document.getElementById("stock").value);
-      const description = document.getElementById("description").value;
+    loginBtn.onclick = async ()=>{
+      loginMsg.textContent='';
+      const email = document.getElementById('email').value;
+      const password = document.getElementById('password').value;
+      try{
+        await signInWithEmailAndPassword(auth,email,password);
+      }catch(err){
+        loginMsg.textContent = err.message;
+      }
+    };
 
-      // Collect image URLs (ignore empty ones)
-      const imageUrls = [
-        document.getElementById("img1").value,
-        document.getElementById("img2").value,
-        document.getElementById("img3").value,
-        document.getElementById("img4").value,
-        document.getElementById("img5").value,
-      ].filter(url => url.trim() !== "");
-
-      // Save in Firestore -> Products collection
-      await db.collection("Products").add({
-        title, price, stock, description,
-        images: imageUrls,
-        createdAt: firebase.firestore.FieldValue.serverTimestamp()
-      });
-
-      form.reset();
-      loadProducts();
+    onAuthStateChanged(auth,user=>{
+      if(user && user.email==='crodyto@gmail.com'){
+        loginCard.style.display='none';
+        adminPanel.style.display='block';
+        loadProducts();
+      }else{
+        loginCard.style.display='block';
+        adminPanel.style.display='none';
+      }
     });
 
-    // Load Products
-    async function loadProducts() {
-      productsDiv.innerHTML = "";
-      const snapshot = await db.collection("Products").orderBy("createdAt","desc").get();
-      snapshot.forEach(doc => {
-        const p = doc.data();
-        const div = document.createElement("div");
-        div.className = "product";
-        div.innerHTML = `
-          <h3>${p.title} - ₹${p.price}</h3>
-          <p>${p.description}</p>
-          <p>Stock: ${p.stock}</p>
-          <div>${p.images.map(url => `<img src='${url}' />`).join("")}</div>
-          <div class="actions">
-            <button onclick="deleteProduct('${doc.id}')">Delete</button>
-          </div>
-        `;
-        productsDiv.appendChild(div);
+    const saveBtn = document.getElementById('saveBtn');
+    const clearBtn = document.getElementById('clearBtn');
+
+    function getProductData(){
+      return {
+        name: document.getElementById('name').value,
+        price: parseFloat(document.getElementById('price').value),
+        description: document.getElementById('description').value,
+        sizes: document.getElementById('sizes').value.split(',').map(s=>s.trim()),
+        images: [
+          document.getElementById('image1').value,
+          document.getElementById('image2').value,
+          document.getElementById('image3').value,
+          document.getElementById('image4').value,
+          document.getElementById('image5').value
+        ]
+      };
+    }
+
+    saveBtn.onclick = async ()=>{
+      const productId = document.getElementById('productId').value.trim();
+      const data = getProductData();
+      try{
+        if(productId){
+          await updateDoc(doc(db,'products',productId),data);
+        }else{
+          await addDoc(productsCol,data);
+        }
+        alert('Saved successfully');
+        clearForm();
+      }catch(err){ alert('Error: '+err.message);}
+    };
+
+    clearBtn.onclick = ()=>{
+      clearForm();
+    };
+
+    function clearForm(){
+      document.getElementById('productId').value='';
+      document.getElementById('name').value='';
+      document.getElementById('price').value='';
+      document.getElementById('description').value='';
+      document.getElementById('sizes').value='';
+      for(let i=1;i<=5;i++) document.getElementById('image'+i).value='';
+    }
+
+    const productsTable = document.getElementById('productsTable');
+
+    function loadProducts(){
+      onSnapshot(productsCol, snapshot=>{
+        const rows = snapshot.docs.map(doc=>{
+          const data = doc.data();
+          const images = (data.images||[]).filter(u=>u).join(', ');
+          return `<tr>
+            <td>${doc.id}</td>
+            <td>${data.name||''}</td>
+            <td>${data.price||0}</td>
+            <td>${(data.sizes||[]).join(', ')}</td>
+            <td>${images}</td>
+            <td>
+              <button onclick="editProduct('${doc.id}')">Edit</button>
+              <button onclick="deleteProduct('${doc.id}')">Delete</button>
+            </td>
+          </tr>`;
+        }).join('');
+        productsTable.innerHTML = rows || '<tr><td colspan="6">No products</td></tr>';
       });
     }
 
-    // Delete Product
-    async function deleteProduct(id) {
-      if (!confirm("Delete this product?")) return;
-      await db.collection("Products").doc(id).delete();
-      loadProducts();
-    }
+    window.editProduct = async (id)=>{
+      const docRef = doc(db,'products',id);
+      const docSnap = await docRef.get();
+      if(docSnap.exists()){
+        const data = docSnap.data();
+        document.getElementById('productId').value = id;
+        document.getElementById('name').value = data.name||'';
+        document.getElementById('price').value = data.price||'';
+        document.getElementById('description').value = data.description||'';
+        document.getElementById('sizes').value = (data.sizes||[]).join(', ');
+        for(let i=0;i<5;i++) document.getElementById('image'+(i+1)).value = data.images?.[i]||'';
+      }
+    };
 
-    loadProducts();
+    window.deleteProduct = async (id)=>{
+      if(confirm('Are you sure you want to delete this product?')){
+        await deleteDoc(doc(db,'products',id));
+      }
+    };
+
   </script>
 </body>
 </html>
